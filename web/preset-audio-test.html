@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预设音频测试 - LiveTalking</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .preset-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .preset-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .preset-btn:active {
+            transform: translateY(0);
+        }
+
+        .preset-btn.playing {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .preset-btn .badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255,255,255,0.3);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+
+        .controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .control-row label {
+            min-width: 100px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .control-row input,
+        .control-row select {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .control-row input:focus,
+        .control-row select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .action-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: #218838;
+        }
+
+        .action-btn.danger {
+            background: #dc3545;
+        }
+
+        .action-btn.danger:hover {
+            background: #c82333;
+        }
+
+        .status {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .status-title {
+            font-weight: 600;
+            color: #1976D2;
+            margin-bottom: 5px;
+        }
+
+        .status-message {
+            color: #555;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85em;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry.success { color: #28a745; }
+        .log-entry.error { color: #dc3545; }
+        .log-entry.info { color: #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ LiveTalking 预设音频测试</h1>
+            <p>点击下方按钮播放预设音频，实现零延迟响应</p>
+        </div>
+
+        <div class="content">
+            <!-- 欢迎语和问候语 -->
+            <div class="section">
+                <div class="section-title">🙋 欢迎语 & 问候语</div>
+                <div class="button-grid">
+                    <button class="preset-btn" onclick="playPreset(2, this)">
+                        <span class="badge">2</span>
+                        欢迎语
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(3, this)">
+                        <span class="badge">3</span>
+                        早上好
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(4, this)">
+                        <span class="badge">4</span>
+                        下午好
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(5, this)">
+                        <span class="badge">5</span>
+                        晚上好
+                    </button>
+                </div>
+            </div>
+
+            <!-- 常见问题 -->
+            <div class="section">
+                <div class="section-title">❓ 常见问题回答</div>
+                <div class="button-grid">
+                    <button class="preset-btn" onclick="playPreset(11, this)">
+                        <span class="badge">11</span>
+                        营业时间
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(12, this)">
+                        <span class="badge">12</span>
+                        地址位置
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(13, this)">
+                        <span class="badge">13</span>
+                        联系方式
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(14, this)">
+                        <span class="badge">14</span>
+                        价格套餐
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(15, this)">
+                        <span class="badge">15</span>
+                        功能介绍
+                    </button>
+                </div>
+            </div>
+
+            <!-- 其他场景 -->
+            <div class="section">
+                <div class="section-title">💬 其他场景</div>
+                <div class="button-grid">
+                    <button class="preset-btn" onclick="playPreset(20, this)">
+                        <span class="badge">20</span>
+                        再见/结束
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(21, this)">
+                        <span class="badge">21</span>
+                        转人工客服
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(22, this)">
+                        <span class="badge">22</span>
+                        未理解/重复
+                    </button>
+                    <button class="preset-btn" onclick="playPreset(1, this)">
+                        <span class="badge">1</span>
+                        静默/待机
+                    </button>
+                </div>
+            </div>
+
+            <!-- 控制面板 -->
+            <div class="controls">
+                <div class="section-title">⚙️ 控制面板</div>
+                
+                <div class="control-row">
+                    <label>服务地址:</label>
+                    <input type="text" id="serverUrl" value="http://localhost:8010" placeholder="http://localhost:8010">
+                </div>
+
+                <div class="control-row">
+                    <label>会话ID:</label>
+                    <input type="number" id="sessionId" value="0" min="0">
+                </div>
+
+                <div class="control-row">
+                    <label>自定义类型:</label>
+                    <input type="number" id="customType" value="2" min="1" placeholder="输入audiotype">
+                    <button class="action-btn" onclick="playCustom()">播放自定义</button>
+                </div>
+
+                <div class="control-row">
+                    <label>重新开始:</label>
+                    <select id="reinit">
+                        <option value="true">是（从头播放）</option>
+                        <option value="false">否（继续播放）</option>
+                    </select>
+                </div>
+
+                <div class="control-row">
+                    <button class="action-btn danger" onclick="interruptTalk()">⏹️ 中断当前播放</button>
+                    <button class="action-btn" onclick="clearLog()">🗑️ 清除日志</button>
+                </div>
+            </div>
+
+            <!-- 状态显示 -->
+            <div class="status">
+                <div class="status-title">📊 状态信息</div>
+                <div class="status-message" id="statusMessage">就绪，等待操作...</div>
+            </div>
+
+            <!-- 日志 -->
+            <div class="log" id="logContainer">
+                <div class="log-entry info">系统就绪，可以开始测试预设音频功能</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPlayingButton = null;
+
+        /**
+         * 播放预设音频
+         */
+        async function playPreset(audiotype, buttonElement) {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+            const reinit = document.getElementById('reinit').value === 'true';
+
+            // 更新按钮状态
+            if (currentPlayingButton) {
+                currentPlayingButton.classList.remove('playing');
+            }
+            buttonElement.classList.add('playing');
+            currentPlayingButton = buttonElement;
+
+            // 更新状态
+            updateStatus(`正在播放预设音频 #${audiotype}...`);
+            addLog(`info`, `发送请求: audiotype=${audiotype}, sessionId=${sessionId}, reinit=${reinit}`);
+
+            try {
+                const response = await fetch(`${serverUrl}/set_audiotype`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sessionid: sessionId,
+                        audiotype: audiotype,
+                        reinit: reinit
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    updateStatus(`✅ 成功播放预设音频 #${audiotype}`);
+                    addLog('success', `播放成功: ${JSON.stringify(result)}`);
+                } else {
+                    updateStatus(`❌ 播放失败: ${result.msg}`);
+                    addLog('error', `播放失败: ${result.msg}`);
+                    buttonElement.classList.remove('playing');
+                }
+            } catch (error) {
+                updateStatus(`❌ 请求失败: ${error.message}`);
+                addLog('error', `请求失败: ${error.message}`);
+                buttonElement.classList.remove('playing');
+            }
+        }
+
+        /**
+         * 播放自定义类型
+         */
+        async function playCustom() {
+            const audiotype = parseInt(document.getElementById('customType').value);
+            if (isNaN(audiotype) || audiotype < 1) {
+                alert('请输入有效的audiotype（大于0的整数）');
+                return;
+            }
+            
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+            const reinit = document.getElementById('reinit').value === 'true';
+
+            updateStatus(`正在播放自定义预设 #${audiotype}...`);
+            addLog(`info`, `发送自定义请求: audiotype=${audiotype}`);
+
+            try {
+                const response = await fetch(`${serverUrl}/set_audiotype`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sessionid: sessionId,
+                        audiotype: audiotype,
+                        reinit: reinit
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    updateStatus(`✅ 成功播放自定义预设 #${audiotype}`);
+                    addLog('success', `播放成功: ${JSON.stringify(result)}`);
+                } else {
+                    updateStatus(`❌ 播放失败: ${result.msg}`);
+                    addLog('error', `播放失败: ${result.msg}`);
+                }
+            } catch (error) {
+                updateStatus(`❌ 请求失败: ${error.message}`);
+                addLog('error', `请求失败: ${error.message}`);
+            }
+        }
+
+        /**
+         * 中断当前播放
+         */
+        async function interruptTalk() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+
+            updateStatus('正在中断播放...');
+            addLog('info', '发送中断请求');
+
+            try {
+                const response = await fetch(`${serverUrl}/interrupt_talk`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sessionid: sessionId
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    updateStatus('✅ 已中断播放');
+                    addLog('success', '中断成功');
+                    if (currentPlayingButton) {
+                        currentPlayingButton.classList.remove('playing');
+                        currentPlayingButton = null;
+                    }
+                } else {
+                    updateStatus(`❌ 中断失败: ${result.msg}`);
+                    addLog('error', `中断失败: ${result.msg}`);
+                }
+            } catch (error) {
+                updateStatus(`❌ 请求失败: ${error.message}`);
+                addLog('error', `请求失败: ${error.message}`);
+            }
+        }
+
+        /**
+         * 更新状态信息
+         */
+        function updateStatus(message) {
+            document.getElementById('statusMessage').textContent = message;
+        }
+
+        /**
+         * 添加日志
+         */
+        function addLog(type, message) {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        /**
+         * 清除日志
+         */
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+            addLog('info', '日志已清除');
+        }
+
+        // 页面加载完成后检查服务器连接
+        window.addEventListener('load', async () => {
+            const serverUrl = document.getElementById('serverUrl').value;
+            addLog('info', `检查服务器连接: ${serverUrl}`);
+            
+            try {
+                const response = await fetch(`${serverUrl}/`);
+                if (response.ok) {
+                    addLog('success', '✓ 服务器连接正常');
+                    updateStatus('✅ 服务器连接正常，可以开始测试');
+                } else {
+                    addLog('error', '✗ 服务器连接失败');
+                    updateStatus('❌ 服务器连接失败，请检查服务是否启动');
+                }
+            } catch (error) {
+                addLog('error', `✗ 无法连接到服务器: ${error.message}`);
+                updateStatus('❌ 无法连接到服务器，请确保服务已启动');
+            }
+        });
+    </script>
+</body>
+</html>

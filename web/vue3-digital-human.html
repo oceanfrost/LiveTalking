@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能数字人助手</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            max-width: 800px;
+            width: 90%;
+            min-height: 600px;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .video-container {
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            margin-bottom: 30px;
+            background: #000;
+        }
+
+        .video-container video {
+            display: block;
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .video-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .status-indicator {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+
+        .status-connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ff6b35;
+            border: 2px solid rgba(255, 193, 7, 0.4);
+        }
+
+        .status-connected {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+            border: 2px solid rgba(40, 167, 69, 0.4);
+        }
+
+        .status-error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+            border: 2px solid rgba(220, 53, 69, 0.4);
+        }
+
+        .control-section {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #4f46e5, #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .chat-section {
+            background: #f8fafc;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+        }
+
+        .input-wrapper label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .chat-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+            font-family: inherit;
+        }
+
+        .chat-textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .btn-send {
+            background: linear-gradient(45deg, #06b6d4, #0891b2);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+
+        .btn-send:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(6, 182, 212, 0.4);
+        }
+
+        .settings-section {
+            background: #f1f5f9;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .setting-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .setting-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .setting-item label {
+            cursor: pointer;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 20px;
+                width: calc(100% - 40px);
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .button-group {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 280px;
+            }
+
+            .chat-input-group {
+                flex-direction: column;
+            }
+
+            .btn-send {
+                width: 100%;
+            }
+        }
+
+        /* 隐藏音频元素 */
+        audio {
+            display: none;
+        }
+
+        /* 加载动画 */
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>智能数字人助手</h1>
+                <p>基于AI的实时交互数字人，支持语音对话和智能问答</p>
+            </div>
+            
+            <div class="content">
+                <!-- 视频区域 -->
+                <div class="video-container">
+                    <video 
+                        ref="videoElement"
+                        autoplay 
+                        playsinline 
+                        muted
+                        @loadstart="onVideoLoadStart"
+                        @loadeddata="onVideoLoaded">
+                    </video>
+                    
+                    <!-- 视频遮罩层 -->
+                    <div class="video-overlay" :class="{ hidden: isConnected }">
+                        <div class="loading-spinner" v-if="isConnecting"></div>
+                        <div class="status-indicator" :class="statusClass">
+                            {{ statusText }}
+                        </div>
+                        <div v-if="!isConnecting && !isConnected" style="text-align: center;">
+                            <p style="margin-bottom: 15px; opacity: 0.8;">点击开始按钮连接数字人</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 控制按钮 -->
+                <div class="control-section">
+                    <div class="button-group">
+                        <button 
+                            class="btn btn-primary" 
+                            @click="startConnection"
+                            :disabled="isConnecting || isConnected">
+                            {{ isConnecting ? '连接中...' : '开始对话' }}
+                        </button>
+                        
+                        <button 
+                            class="btn btn-danger" 
+                            @click="stopConnection"
+                            :disabled="!isConnected">
+                            结束对话
+                        </button>
+                        
+                        <button 
+                            class="btn btn-success" 
+                            @click="toggleRecording"
+                            :disabled="!isConnected">
+                            {{ isRecording ? '停止录制' : '开始录制' }}
+                        </button>
+                    </div>
+
+                    <!-- 对话输入区域 -->
+                    <div class="chat-section">
+                        <div class="chat-input-group">
+                            <div class="input-wrapper">
+                                <label for="messageInput">与数字人对话</label>
+                                <textarea 
+                                    id="messageInput"
+                                    v-model="messageText"
+                                    class="chat-textarea"
+                                    placeholder="请输入您想要对话的内容..."
+                                    @keydown.ctrl.enter="sendMessage">
+                                </textarea>
+                            </div>
+                            <button 
+                                class="btn-send" 
+                                @click="sendMessage"
+                                :disabled="!messageText.trim() || !isConnected">
+                                发送 (Ctrl+Enter)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 设置区域 -->
+                    <div class="settings-section">
+                        <div class="setting-item">
+                            <input type="checkbox" id="useStun" v-model="useStunServer">
+                            <label for="useStun">使用STUN服务器 (提高连接稳定性)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 隐藏的音频元素 -->
+                <audio ref="audioElement" autoplay></audio>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+
+        createApp({
+            setup() {
+                // 响应式数据
+                const videoElement = ref(null);
+                const audioElement = ref(null);
+                const isConnecting = ref(false);
+                const isConnected = ref(false);
+                const isRecording = ref(false);
+                const messageText = ref('欢迎使用智能数字人助手！');
+                const useStunServer = ref(true);
+                const sessionId = ref(0);
+                
+                // WebRTC相关
+                let pc = null;
+
+                // 计算属性
+                const statusClass = computed(() => {
+                    if (isConnecting.value) return 'status-connecting';
+                    if (isConnected.value) return 'status-connected';
+                    return 'status-error';
+                });
+
+                const statusText = computed(() => {
+                    if (isConnecting.value) return '正在连接数字人...';
+                    if (isConnected.value) return '数字人已就绪';
+                    return '数字人未连接';
+                });
+
+                // WebRTC协商函数
+                const negotiate = async () => {
+                    if (!pc) return;
+
+                    try {
+                        // 添加音视频轨道（仅接收）
+                        pc.addTransceiver('video', { direction: 'recvonly' });
+                        pc.addTransceiver('audio', { direction: 'recvonly' });
+
+                        // 创建offer
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+
+                        // 等待ICE收集完成
+                        await waitForIceGathering();
+
+                        // 发送offer到服务器
+                        const response = await fetch('/offer', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                sdp: pc.localDescription.sdp,
+                                type: pc.localDescription.type,
+                            })
+                        });
+
+                        const answer = await response.json();
+                        sessionId.value = answer.sessionid;
+                        
+                        // 设置远程描述
+                        await pc.setRemoteDescription(answer);
+                        
+                        isConnected.value = true;
+                        isConnecting.value = false;
+                        
+                    } catch (error) {
+                        console.error('WebRTC协商失败:', error);
+                        isConnecting.value = false;
+                        alert('连接数字人失败，请检查网络连接');
+                    }
+                };
+
+                // 等待ICE收集完成
+                const waitForIceGathering = () => {
+                    return new Promise((resolve) => {
+                        if (pc.iceGatheringState === 'complete') {
+                            resolve();
+                        } else {
+                            const checkState = () => {
+                                if (pc.iceGatheringState === 'complete') {
+                                    pc.removeEventListener('icegatheringstatechange', checkState);
+                                    resolve();
+                                }
+                            };
+                            pc.addEventListener('icegatheringstatechange', checkState);
+                        }
+                    });
+                };
+
+                // 开始连接
+                const startConnection = async () => {
+                    if (isConnecting.value || isConnected.value) return;
+
+                    isConnecting.value = true;
+                    
+                    try {
+                        // WebRTC配置
+                        const config = { sdpSemantics: 'unified-plan' };
+                        
+                        if (useStunServer.value) {
+                            config.iceServers = [
+                                { urls: ['stun:stun.l.google.com:19302'] },
+                                { urls: ['stun:stun.miwifi.com:3478'] }
+                            ];
+                        }
+
+                        pc = new RTCPeerConnection(config);
+
+                        // 监听轨道事件
+                        pc.addEventListener('track', (evt) => {
+                            if (evt.track.kind === 'video' && videoElement.value) {
+                                videoElement.value.srcObject = evt.streams[0];
+                            } else if (evt.track.kind === 'audio' && audioElement.value) {
+                                audioElement.value.srcObject = evt.streams[0];
+                            }
+                        });
+
+                        // 监听连接状态
+                        pc.addEventListener('connectionstatechange', () => {
+                            console.log('连接状态:', pc.connectionState);
+                            if (pc.connectionState === 'connected') {
+                                console.log('WebRTC连接成功建立');
+                            } else if (pc.connectionState === 'failed') {
+                                console.error('WebRTC连接失败');
+                                isConnected.value = false;
+                                isConnecting.value = false;
+                                // 3秒后自动重试
+                                setTimeout(() => {
+                                    if (!isConnected.value) {
+                                        console.log('尝试自动重连...');
+                                        startConnection();
+                                    }
+                                }, 3000);
+                            } else if (pc.connectionState === 'disconnected') {
+                                console.warn('WebRTC连接断开');
+                                isConnected.value = false;
+                                isConnecting.value = false;
+                            }
+                        });
+
+                        await negotiate();
+                        
+                    } catch (error) {
+                        console.error('启动连接失败:', error);
+                        isConnecting.value = false;
+                        
+                        let errorMessage = '连接失败';
+                        if (error.name === 'NetworkError') {
+                            errorMessage = '网络错误，请检查网络连接';
+                        } else if (error.message.includes('404')) {
+                            errorMessage = '服务未找到，请确认LiveTalking服务正在运行';
+                        } else if (error.message.includes('500')) {
+                            errorMessage = '服务器内部错误，请检查模型加载状态';
+                        } else if (error.message.includes('Failed to fetch')) {
+                            errorMessage = '无法连接到服务器，请检查服务地址和端口';
+                        }
+                        
+                        alert(errorMessage + '\n\n技术详情: ' + error.message);
+                    }
+                };
+
+                // 停止连接
+                const stopConnection = () => {
+                    if (pc) {
+                        setTimeout(() => {
+                            pc.close();
+                            pc = null;
+                        }, 500);
+                    }
+                    
+                    if (videoElement.value) {
+                        videoElement.value.srcObject = null;
+                    }
+                    if (audioElement.value) {
+                        audioElement.value.srcObject = null;
+                    }
+                    
+                    isConnected.value = false;
+                    isConnecting.value = false;
+                    isRecording.value = false;
+                };
+
+                // 切换录制状态
+                const toggleRecording = async () => {
+                    if (!isConnected.value) return;
+
+                    try {
+                        const action = isRecording.value ? 'end_record' : 'start_record';
+                        
+                        const response = await fetch('/record', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                type: action,
+                                sessionid: sessionId.value,
+                            })
+                        });
+
+                        if (response.ok) {
+                            isRecording.value = !isRecording.value;
+                            console.log(isRecording.value ? '开始录制' : '停止录制');
+                        } else {
+                            alert('录制操作失败');
+                        }
+                    } catch (error) {
+                        console.error('录制操作错误:', error);
+                        alert('录制操作错误: ' + error.message);
+                    }
+                };
+
+                // 发送消息
+                const sendMessage = async () => {
+                    if (!messageText.value.trim() || !isConnected.value) return;
+
+                    try {
+                        // 先检查数字人是否正在说话
+                        const speakingResponse = await fetch('/is_speaking', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionid: sessionId.value })
+                        });
+                        
+                        const speakingData = await speakingResponse.json();
+                        
+                        const response = await fetch('/human', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                text: messageText.value,
+                                type: 'echo',
+                                interrupt: speakingData.data, // 如果正在说话则打断
+                                sessionid: sessionId.value,
+                            })
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.code === 0) {
+                                console.log('消息发送成功:', messageText.value);
+                                messageText.value = '';
+                            } else {
+                                throw new Error(result.msg || '服务器返回错误');
+                            }
+                        } else {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                    } catch (error) {
+                        console.error('发送消息错误:', error);
+                        alert('发送消息失败: ' + error.message);
+                    }
+                };
+
+                // 视频加载事件
+                const onVideoLoadStart = () => {
+                    console.log('视频开始加载');
+                };
+
+                const onVideoLoaded = () => {
+                    console.log('视频加载完成');
+                };
+
+                // 生命周期钩子
+                onMounted(() => {
+                    console.log('Vue应用已挂载');
+                    
+                    // 页面卸载时清理连接
+                    window.addEventListener('beforeunload', stopConnection);
+                    
+                    // 页面可见性变化时的处理
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden) {
+                            console.log('页面进入后台');
+                        } else {
+                            console.log('页面重新可见');
+                            // 如果连接断开且没有在连接中，尝试重连
+                            if (!isConnected.value && !isConnecting.value) {
+                                setTimeout(() => startConnection(), 1000);
+                            }
+                        }
+                    });
+                });
+
+                onUnmounted(() => {
+                    stopConnection();
+                    window.removeEventListener('beforeunload', stopConnection);
+                });
+
+                return {
+                    // refs
+                    videoElement,
+                    audioElement,
+                    
+                    // 响应式数据
+                    isConnecting,
+                    isConnected,
+                    isRecording,
+                    messageText,
+                    useStunServer,
+                    
+                    // 计算属性
+                    statusClass,
+                    statusText,
+                    
+                    // 方法
+                    startConnection,
+                    stopConnection,
+                    toggleRecording,
+                    sendMessage,
+                    onVideoLoadStart,
+                    onVideoLoaded,
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

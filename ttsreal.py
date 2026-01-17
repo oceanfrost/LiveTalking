@@ -92,9 +92,55 @@ class BaseTTS:
 
 ###########################################################################################
 class EdgeTTS(BaseTTS):
+    def __init__(self, opt, parent):
+        super().__init__(opt, parent)
+        # 加载预设音频配置
+        self.preset_audios = {}
+        self._load_preset_config()
+    
+    def _load_preset_config(self):
+        """加载预设音频配置"""
+        import json
+        config_path = "data/preset_audio_config.json"
+        
+        if not os.path.exists(config_path):
+            logger.info(f"预设音频配置文件不存在: {config_path}, 跳过预设音频加载")
+            return
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            for preset in config:
+                preset_id = preset['id']
+                audio_path = preset['audio_path']
+                
+                if os.path.exists(audio_path):
+                    self.preset_audios[preset_id] = {
+                        'path': audio_path,
+                        'name': preset.get('name', preset_id),
+                        'text': preset.get('text', '')
+                    }
+                    logger.info(f"已加载预设音频: {preset_id} - {preset.get('name', '')}")
+                else:
+                    logger.warning(f"预设音频文件不存在: {audio_path}")
+            
+            logger.info(f"共加载 {len(self.preset_audios)} 个预设音频")
+        except Exception as e:
+            logger.error(f"加载预设音频配置失败: {e}")
+    
     def txt_to_audio(self,msg:tuple[str, dict]):
-        voicename = self.opt.REF_FILE #"zh-CN-YunxiaNeural"
         text,textevent = msg
+        
+        # 检查是否是预设音频ID
+        if text.strip() in self.preset_audios:
+            preset_id = text.strip()
+            logger.info(f"使用预设音频: {preset_id} - {self.preset_audios[preset_id]['name']}")
+            self._play_preset_audio(preset_id, text, textevent)
+            return
+        
+        # 使用EdgeTTS实时生成
+        voicename = self.opt.REF_FILE #"zh-CN-YunxiaNeural"
         t = time.time()
         asyncio.new_event_loop().run_until_complete(self.__main(voicename,text))
         logger.info(f'-------edge tts time:{time.time()-t:.4f}s')
@@ -120,7 +166,59 @@ class EdgeTTS(BaseTTS):
         #if streamlen>0:  #skip last frame(not 20ms)
         #    self.queue.put(stream[idx:])
         self.input_stream.seek(0)
-        self.input_stream.truncate() 
+        self.input_stream.truncate()
+    
+    def _play_preset_audio(self, preset_id, text, textevent):
+        """播放预设音频文件"""
+        try:
+            preset = self.preset_audios[preset_id]
+            audio_path = preset['path']
+            
+            # 读取预设音频文件
+            logger.info(f"加载预设音频文件: {audio_path}")
+            audio_data, sample_rate = sf.read(audio_path, dtype='float32')
+            
+            # 转换为单声道
+            if audio_data.ndim > 1:
+                logger.info(f'音频有 {audio_data.shape[1]} 个声道，只使用第一个')
+                audio_data = audio_data[:, 0]
+            
+            # 重采样到16kHz（如果需要）
+            if sample_rate != self.sample_rate:
+                logger.info(f'重采样音频: {sample_rate}Hz -> {self.sample_rate}Hz')
+                import resampy
+                audio_data = resampy.resample(x=audio_data, sr_orig=sample_rate, sr_new=self.sample_rate)
+            
+            # 分块发送音频，驱动视频生成
+            streamlen = len(audio_data)
+            idx = 0
+            logger.info(f"开始播放预设音频: {preset['name']}, 总长度: {streamlen} 采样点 ({streamlen/self.sample_rate:.2f}秒)")
+            
+            while streamlen >= self.chunk and self.state == State.RUNNING:
+                eventpoint = {}
+                streamlen -= self.chunk
+                
+                if idx == 0:
+                    # 第一帧：添加开始事件
+                    eventpoint = {'status': 'start', 'text': preset.get('text', text)}
+                    eventpoint.update(**textevent)
+                    logger.info(f"预设音频开始播放: {preset_id}")
+                elif streamlen < self.chunk:
+                    # 最后一帧：添加结束事件
+                    eventpoint = {'status': 'end', 'text': preset.get('text', text)}
+                    eventpoint.update(**textevent)
+                    logger.info(f"预设音频播放完成: {preset_id}")
+                
+                # 发送音频帧到父类处理（会触发视频生成）
+                self.parent.put_audio_frame(audio_data[idx:idx+self.chunk], eventpoint)
+                idx += self.chunk
+            
+            logger.info(f"预设音频 {preset_id} 播放完成")
+            
+        except Exception as e:
+            logger.error(f"播放预设音频失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     def __create_bytes_stream(self,byte_stream):
         #byte_stream=BytesIO(buffer)

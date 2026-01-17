@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveTalking - Vue3数字人</title>
+    <link rel="stylesheet" href="digital-human.css">
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        
+        .app-header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .app-header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .app-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="app-header">
+            <h1>LiveTalking 数字人助手</h1>
+            <p>基于Vue3的现代化数字人交互界面</p>
+        </div>
+        
+        <digital-human></digital-human>
+    </div>
+
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- 数字人组件 -->
+    <script src="digital-human.js"></script>
+    
+    <script>
+        const { createApp } = Vue;
+        
+        // 导入数字人组件 (在实际项目中应该使用模块导入)
+        // import DigitalHuman from './digital-human.js';
+        
+        const app = createApp({
+            components: {
+                'digital-human': window.DigitalHuman || {
+                    template: '<div>组件加载失败</div>'
+                }
+            }
+        });
+        
+        // 全局错误处理
+        app.config.errorHandler = (err, vm, info) => {
+            console.error('Vue应用错误:', err, info);
+        };
+        
+        app.mount('#app');
+        
+        // 全局事件监听
+        window.addEventListener('error', (event) => {
+            console.error('全局错误:', event.error);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('未处理的Promise拒绝:', event.reason);
+        });
+        
+        console.log('LiveTalking Vue3应用已启动');
+    </script>
+</body>
+</html>

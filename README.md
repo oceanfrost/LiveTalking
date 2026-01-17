@@ -38,6 +38,7 @@
 4. 支持webrtc、虚拟摄像头输出
 5. 支持动作编排：不说话时播放自定义视频
 6. 支持多并发
+7. **支持预设音频：使用预生成的音频驱动数字人，实现零延迟响应** 🆕
 
 ## 1. Installation
 
@@ -77,6 +78,46 @@ python app.py --transport webrtc --model wav2lip --avatar_id wav2lip256_avatar1
 ```
 export HF_ENDPOINT=https://hf-mirror.com
 ``` 
+
+### 预设音频功能（零延迟响应）🔥
+使用预先生成的音频文件驱动数字人，避免实时TTS生成延迟，适用于欢迎语、FAQ等固定场景。
+
+#### 方案一：简化版（推荐）⭐
+**只需音频文件，视频实时生成！**
+
+```bash
+# 1. 生成预设音频（只生成音频文件）
+python generate_simple_preset_audio.py
+
+# 2. 启动服务（暂时使用echo模式测试）
+python app.py --transport webrtc --model wav2lip --avatar_id wav2lip256_avatar1
+
+# 3. 测试页面
+# 浏览器访问：http://localhost:8010/preset-simple-test.html
+```
+
+**API调用：**
+```javascript
+// 播放预设ID为 "welcome" 的音频
+fetch('/human', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+        sessionid: 0,
+        type: 'echo',
+        text: 'welcome'  // 预设音频ID
+    })
+});
+```
+
+**详细说明：** [预设音频简化方案.md](./预设音频简化方案.md)
+
+#### 方案二：完整版（需要图像序列）
+使用预先准备的音频和图像序列，通过专门的API播放。
+
+**详细文档：**
+- [快速开始指南](./PRESET_AUDIO_QUICKSTART.md) - 3步完成配置
+- [完整使用指南](./预设音频使用指南.md) - 高级功能和最佳实践 
 
 
 ## 3. More Usage
