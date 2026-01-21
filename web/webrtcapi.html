@@ -11,6 +11,15 @@
 
     video {
         width: 100%;
+        display: none; /* 隐藏原始video，使用canvas显示 */
+    }
+
+    #output-canvas {
+        width: 600px;
+        background: transparent;
+        /* 可以设置任意背景，比如图片或颜色 */
+        /* background-image: url('your-background.jpg'); */
+        /* background-color: #00ff00; */ /* 绿色背景测试 */
     }
 
     .option {
@@ -19,6 +28,13 @@
 
     #media {
         max-width: 1280px;
+    }
+
+    .background-options {
+        margin: 10px 0;
+    }
+    .background-options label {
+        margin-right: 15px;
     }
     </style>
 </head>
@@ -45,13 +61,182 @@
 
 <div id="media">
     <h2>Media</h2>
+    
+    <div class="background-options">
+        <label><input type="radio" name="bg" value="transparent" checked> 透明背景</label>
+        <label><input type="radio" name="bg" value="white"> 白色背景</label>
+        <label><input type="radio" name="bg" value="blue"> 蓝色背景</label>
+        <label><input type="radio" name="bg" value="image"> 图片背景</label>
+        <br>
+        <label>绿幕容差: <input type="range" id="tolerance" min="0" max="150" value="80"> <span id="tolerance-val">80</span></label>
+        <label>边缘柔化: <input type="range" id="softness" min="0" max="50" value="20"> <span id="softness-val">20</span></label>
+        <label><input type="checkbox" id="spill-suppression" checked> 去除绿色溢出</label>
+    </div>
 
     <audio id="audio" autoplay="true"></audio>
     <video id="video" style="width:600px;" autoplay="true" playsinline="true"></video>
+    <canvas id="output-canvas"></canvas>
 </div>
 
+<script>
+// 绿幕色度键处理
+let videoElement = null;
+let canvasElement = null;
+let ctx = null;
+let animationId = null;
+
+// 色度键参数
+let tolerance = 80;      // 绿色容差
+let softness = 20;       // 边缘柔化范围
+let spillSuppression = true;  // 绿色溢出抑制
+
+function initChromaKey() {
+    videoElement = document.getElementById('video');
+    canvasElement = document.getElementById('output-canvas');
+    ctx = canvasElement.getContext('2d', { willReadFrequently: true });
+    
+    // 监听视频元数据加载
+    videoElement.addEventListener('loadedmetadata', () => {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+        startProcessing();
+    });
+    
+    // 如果视频已经在播放
+    videoElement.addEventListener('play', () => {
+        if (canvasElement.width === 0) {
+            canvasElement.width = videoElement.videoWidth || 600;
+            canvasElement.height = videoElement.videoHeight || 400;
+        }
+        startProcessing();
+    });
+    
+    // 容差滑块
+    document.getElementById('tolerance').addEventListener('input', (e) => {
+        tolerance = parseInt(e.target.value);
+        document.getElementById('tolerance-val').textContent = tolerance;
+    });
+    
+    // 柔化滑块
+    document.getElementById('softness').addEventListener('input', (e) => {
+        softness = parseInt(e.target.value);
+        document.getElementById('softness-val').textContent = softness;
+    });
+    
+    // 溢出抑制
+    document.getElementById('spill-suppression').addEventListener('change', (e) => {
+        spillSuppression = e.target.checked;
+    });
+    
+    // 背景选项
+    document.querySelectorAll('input[name="bg"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const canvas = document.getElementById('output-canvas');
+            switch(e.target.value) {
+                case 'transparent':
+                    canvas.style.background = 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)';
+                    canvas.style.backgroundSize = '20px 20px';
+                    canvas.style.backgroundPosition = '0 0, 0 10px, 10px -10px, -10px 0px';
+                    canvas.style.backgroundColor = '#fff';
+                    break;
+                case 'white':
+                    canvas.style.background = '#ffffff';
+                    canvas.style.backgroundSize = '';
+                    canvas.style.backgroundPosition = '';
+                    break;
+                case 'blue':
+                    canvas.style.background = '#0066ff';
+                    canvas.style.backgroundSize = '';
+                    canvas.style.backgroundPosition = '';
+                    break;
+                case 'image':
+                    canvas.style.background = 'url("https://picsum.photos/800/600") center/cover';
+                    canvas.style.backgroundSize = 'cover';
+                    canvas.style.backgroundPosition = 'center';
+                    break;
+            }
+        });
+    });
+    
+    // 默认显示棋盘格背景（表示透明）
+    document.querySelector('input[name="bg"][value="transparent"]').dispatchEvent(new Event('change'));
+}
+
+function startProcessing() {
+    if (animationId) return;
+    processFrame();
+}
+
+function processFrame() {
+    if (videoElement.paused || videoElement.ended) {
+        animationId = null;
+        return;
+    }
+    
+    // 绘制视频帧到canvas
+    ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+    
+    // 获取像素数据
+    const imageData = ctx.getImageData(0, 0, canvasElement.width, canvasElement.height);
+    const data = imageData.data;
+    
+    // 色度键处理 - 去除绿色背景
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        
+        // 计算绿色主导程度
+        // 纯绿色: g高，r和b低
+        const greenDominance = g - Math.max(r, b);
+        
+        if (greenDominance > 0) {
+            // 计算与纯绿色的距离
+            const greenness = greenDominance / 255;
+            const threshold = tolerance / 255;
+            const soft = softness / 255;
+            
+            if (greenness > threshold) {
+                // 完全透明
+                data[i + 3] = 0;
+            } else if (greenness > threshold - soft && soft > 0) {
+                // 边缘柔化（半透明过渡）
+                const alpha = (threshold - greenness) / soft;
+                data[i + 3] = Math.round(alpha * 255);
+                
+                // 绿色溢出抑制
+                if (spillSuppression && data[i + 3] > 0) {
+                    data[i + 1] = Math.min(g, Math.max(r, b));
+                }
+            } else if (spillSuppression) {
+                // 非透明区域的绿色溢出抑制
+                const spillAmount = g - Math.max(r, b);
+                if (spillAmount > 20) {
+                    data[i + 1] = Math.max(r, b) + 20;
+                }
+            }
+        }
+    }
+    
+    // 放回处理后的像素数据
+    ctx.putImageData(imageData, 0, 0);
+    
+    animationId = requestAnimationFrame(processFrame);
+}
+
+function stopProcessing() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', initChromaKey);
+</script>
+
 <script src="client.js"></script>
-<script type="text/javascript" src="http://cdn.sockjs.org/sockjs-0.3.4.js"></script>
+<script src="https://unpkg.com/kd-shim-sockjs-client@0.3.4/sockjs-0.3.4.js"></script>
 <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
 </body>
 <script type="text/javascript" charset="utf-8">

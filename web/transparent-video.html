@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>透明视频流 - LiveTalking</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .video-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .video-box {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .video-box h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        /* 透明背景容器 - 棋盘格表示透明 */
+        .transparent-bg {
+            background-image: 
+                linear-gradient(45deg, #ccc 25%, transparent 25%),
+                linear-gradient(-45deg, #ccc 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ccc 75%),
+                linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        /* 自定义背景容器 */
+        .custom-bg {
+            background: url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=800') center/cover;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        .controls {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .stats {
+            font-family: monospace;
+            font-size: 13px;
+            color: #666;
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+        
+        input[type="text"] {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 300px;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .text-input-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 透明视频流演示</h1>
+        
+        <div class="controls">
+            <div class="control-row">
+                <input type="text" id="wsUrl" value="ws://localhost:8010/transparent_video" placeholder="WebSocket URL">
+                <button class="btn-primary" id="connectBtn" onclick="connect()">连接</button>
+                <button class="btn-danger" id="disconnectBtn" onclick="disconnect()" disabled>断开</button>
+                <span id="status" class="status disconnected">未连接</span>
+                <span id="stats" class="stats">FPS: 0 | 数据: 0 KB/s</span>
+            </div>
+            
+            <div class="text-input-section">
+                <textarea id="textInput" placeholder="输入文字让数字人说话..."></textarea>
+                <button class="btn-primary" style="margin-top: 10px;" onclick="sendText()">发送文字</button>
+            </div>
+        </div>
+        
+        <div class="video-container">
+            <div class="video-box">
+                <h3>透明背景（棋盘格）</h3>
+                <div class="transparent-bg">
+                    <canvas id="canvas1" width="512" height="512"></canvas>
+                </div>
+            </div>
+            
+            <div class="video-box">
+                <h3>自定义背景</h3>
+                <div class="custom-bg">
+                    <canvas id="canvas2" width="512" height="512"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 隐藏的音频元素，用于播放 WebRTC 音频 -->
+        <audio id="remoteAudio" autoplay></audio>
+    </div>
+
+    <script>
+        // 全局变量
+        let ws = null;
+        let pc = null;  // WebRTC PeerConnection
+        let sessionid = 0;
+        let canvas1, canvas2, ctx1, ctx2;
+        let frameCount = 0;
+        let lastStatsTime = Date.now();
+        let totalBytes = 0;
+        
+        // 缓存的临时画布（避免每帧创建）
+        let tempCanvas = null;
+        let tempCtx = null;
+        
+        // 初始化
+        window.onload = function() {
+            canvas1 = document.getElementById('canvas1');
+            canvas2 = document.getElementById('canvas2');
+            ctx1 = canvas1.getContext('2d');
+            ctx2 = canvas2.getContext('2d');
+            
+            // 创建临时画布
+            tempCanvas = document.createElement('canvas');
+            tempCtx = tempCanvas.getContext('2d');
+            
+            // 清空画布
+            ctx1.clearRect(0, 0, canvas1.width, canvas1.height);
+            ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+        };
+        
+        // 建立 WebRTC 连接（必须先建立才能触发视频流）
+        async function connectWebRTC() {
+            pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+            
+            // 添加音视频收发器
+            pc.addTransceiver('video', { direction: 'recvonly' });
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+            
+            // 处理远程流（音频用于播放）
+            pc.ontrack = function(event) {
+                if (event.track.kind === 'audio') {
+                    const audio = document.getElementById('remoteAudio');
+                    if (audio) {
+                        audio.srcObject = event.streams[0];
+                    }
+                }
+                // 视频通过 WebSocket 透明流接收，不用 WebRTC 的视频
+            };
+            
+            // 创建 offer
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            // 发送到服务器
+            const response = await fetch('/offer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sdp: offer.sdp,
+                    type: offer.type
+                })
+            });
+            
+            const answer = await response.json();
+            sessionid = answer.sessionid;
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            
+            console.log('WebRTC connected, sessionid:', sessionid);
+            return true;
+        }
+        
+        // 连接（同时建立 WebRTC 和 WebSocket）
+        async function connect() {
+            const url = document.getElementById('wsUrl').value;
+            
+            try {
+                // 1. 先建立 WebRTC 连接（触发视频流）
+                updateStatus('connecting');
+                await connectWebRTC();
+                
+                // 2. 再连接 WebSocket 接收透明帧
+                ws = new WebSocket(url);
+                ws.binaryType = 'arraybuffer';
+                
+                ws.onopen = function() {
+                    console.log('WebSocket connected');
+                    updateStatus(true);
+                };
+                
+                ws.onclose = function() {
+                    console.log('WebSocket closed');
+                    updateStatus(false);
+                };
+                
+                ws.onerror = function(e) {
+                    console.error('WebSocket error:', e);
+                    updateStatus(false);
+                };
+                
+                ws.onmessage = function(event) {
+                    handleFrame(event.data);
+                };
+            } catch (e) {
+                console.error('Connection failed:', e);
+                alert('连接失败: ' + e.message);
+                updateStatus(false);
+            }
+        }
+        
+        // 断开连接
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            updateStatus(false);
+        }
+        
+        // 更新状态
+        function updateStatus(status) {
+            const statusEl = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            
+            if (status === 'connecting') {
+                statusEl.textContent = '连接中...';
+                statusEl.className = 'status';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = true;
+            } else if (status === true) {
+                statusEl.textContent = '已连接';
+                statusEl.className = 'status connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                statusEl.textContent = '未连接';
+                statusEl.className = 'status disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+        
+        // 处理帧数据
+        async function handleFrame(data) {
+            if (!(data instanceof ArrayBuffer)) {
+                console.warn('Unexpected data type');
+                return;
+            }
+            
+            totalBytes += data.byteLength;
+            frameCount++;
+            
+            // 更新统计
+            const now = Date.now();
+            if (now - lastStatsTime >= 1000) {
+                const fps = frameCount;
+                const kbps = (totalBytes / 1024).toFixed(1);
+                document.getElementById('stats').textContent = 
+                    `FPS: ${fps} | 数据: ${kbps} KB/s`;
+                frameCount = 0;
+                totalBytes = 0;
+                lastStatsTime = now;
+            }
+            
+            // 解析二进制数据
+            // 格式: [width:4][height:4][rgb_len:4][rgb_data][alpha_data]
+            const view = new DataView(data);
+            const width = view.getUint32(0, true);  // little-endian
+            const height = view.getUint32(4, true);
+            const rgbLen = view.getUint32(8, true);
+            
+            const rgbData = new Uint8Array(data, 12, rgbLen);
+            const alphaCompressed = new Uint8Array(data, 12 + rgbLen);
+            
+            // 解码 JPEG
+            const rgbBlob = new Blob([rgbData], { type: 'image/jpeg' });
+            const rgbBitmap = await createImageBitmap(rgbBlob);
+            
+            // 解压 Alpha (使用 pako 或手动实现)
+            const alphaRaw = pako.inflate(alphaCompressed);
+            
+            // 调整画布大小
+            if (canvas1.width !== width || canvas1.height !== height) {
+                canvas1.width = width;
+                canvas1.height = height;
+                canvas2.width = width;
+                canvas2.height = height;
+                tempCanvas.width = width;
+                tempCanvas.height = height;
+            }
+            
+            // 创建带透明的图像
+            const imageData = ctx1.createImageData(width, height);
+            
+            // 绘制 RGB 到临时画布获取像素数据
+            tempCtx.drawImage(rgbBitmap, 0, 0);
+            const rgbImageData = tempCtx.getImageData(0, 0, width, height);
+            
+            // 合并 RGB 和 Alpha
+            for (let i = 0; i < width * height; i++) {
+                imageData.data[i * 4] = rgbImageData.data[i * 4];       // R
+                imageData.data[i * 4 + 1] = rgbImageData.data[i * 4 + 1]; // G
+                imageData.data[i * 4 + 2] = rgbImageData.data[i * 4 + 2]; // B
+                imageData.data[i * 4 + 3] = alphaRaw[i];                  // A
+            }
+            
+            // 绘制到两个画布
+            ctx1.clearRect(0, 0, width, height);
+            ctx1.putImageData(imageData, 0, 0);
+            
+            ctx2.clearRect(0, 0, width, height);
+            ctx2.putImageData(imageData, 0, 0);
+        }
+        
+        // 发送文字
+        async function sendText() {
+            const text = document.getElementById('textInput').value.trim();
+            if (!text) {
+                alert('请输入文字');
+                return;
+            }
+            
+            if (!pc || pc.connectionState !== 'connected') {
+                alert('请先连接');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/human', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        type: 'chat',
+                        sessionid: sessionid
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('Text sent successfully');
+                    document.getElementById('textInput').value = '';
+                } else {
+                    console.error('Failed to send text');
+                }
+            } catch (e) {
+                console.error('Error sending text:', e);
+            }
+        }
+        
+        // Enter 键发送
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('textInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendText();
+                }
+            });
+        });
+    </script>
+    
+    <!-- pako for zlib decompression -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+</body>
+</html>

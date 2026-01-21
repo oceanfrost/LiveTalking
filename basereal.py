@@ -42,6 +42,12 @@ from ttsreal import EdgeTTS,SovitsTTS,XTTS,CosyVoiceTTS,FishTTS,TencentTTS,Douba
 from logger import logger
 
 from tqdm import tqdm
+
+# RVM background removal processor (lazy loaded)
+_rvm_processor = None
+
+# Transparent video stream (lazy loaded)
+_transparent_stream = None
 def read_imgs(img_list):
     frames = []
     logger.info('reading images...')
@@ -107,6 +113,93 @@ class BaseReal:
         self.custom_index = {}
         self.custom_opt = {}
         self.__loadcustom()
+        
+        # RVM background removal
+        self.rvm_processor = None
+        self.enable_rvm = getattr(opt, 'enable_rvm', False)
+        if self.enable_rvm:
+            self._init_rvm_processor()
+        
+        # Transparent video stream (WebSocket)
+        self.transparent_stream = None
+        self.enable_transparent_stream = getattr(opt, 'enable_transparent_stream', False)
+        if self.enable_transparent_stream:
+            self._init_transparent_stream()
+    
+    def _init_rvm_processor(self):
+        """初始化RVM背景去除处理器"""
+        global _rvm_processor
+        if _rvm_processor is None:
+            from rvm_processor import RVMProcessor
+            rvm_model_path = getattr(self.opt, 'rvm_model', './models/rvm_resnet50.pth')
+            rvm_downsample = getattr(self.opt, 'rvm_downsample', 0.25)
+            _rvm_processor = RVMProcessor(rvm_model_path, rvm_downsample)
+            _rvm_processor.warm_up()
+        self.rvm_processor = _rvm_processor
+        logger.info(f"RVM processor initialized for session {self.sessionid}")
+    
+    def _init_transparent_stream(self):
+        """初始化透明视频流"""
+        global _transparent_stream
+        if _transparent_stream is None:
+            from transparent_stream import get_transparent_stream
+            _transparent_stream = get_transparent_stream()
+        self.transparent_stream = _transparent_stream
+        logger.info(f"Transparent video stream initialized for session {self.sessionid}")
+    
+    def apply_rvm(self, frame: np.ndarray) -> np.ndarray:
+        """
+        应用RVM背景去除，输出绿幕背景
+        
+        Args:
+            frame: BGR格式的图像 (H, W, 3)
+            
+        Returns:
+            BGR格式图像 (H, W, 3)，背景替换为绿色
+        """
+        if self.rvm_processor is None or not self.enable_rvm:
+            return frame
+        # 使用绿色背景 (BGR: 0, 255, 0)
+        return self.rvm_processor.process_frame(frame, background_color=(0, 255, 0))
+    
+    def apply_rvm_both(self, frame: np.ndarray) -> tuple:
+        """
+        应用RVM背景去除，同时输出BGRA和绿幕BGR（共享一次推理）
+        
+        Args:
+            frame: BGR格式的图像 (H, W, 3)
+            
+        Returns:
+            tuple: (bgra, bgr_green)
+                - bgra: BGRA格式图像 (H, W, 4)，背景透明
+                - bgr_green: BGR格式图像 (H, W, 3)，绿幕背景
+        """
+        if self.rvm_processor is None or not self.enable_rvm:
+            h, w = frame.shape[:2]
+            bgra = np.zeros((h, w, 4), dtype=np.uint8)
+            bgra[:, :, :3] = frame
+            bgra[:, :, 3] = 255
+            return bgra, frame
+        return self.rvm_processor.process_frame_both(frame, background_color=(0, 255, 0))
+    
+    def apply_rvm_rgba(self, frame: np.ndarray) -> np.ndarray:
+        """
+        应用RVM背景去除，输出BGRA带透明通道
+        
+        Args:
+            frame: BGR格式的图像 (H, W, 3)
+            
+        Returns:
+            BGRA格式图像 (H, W, 4)，背景为透明
+        """
+        if self.rvm_processor is None or not self.enable_rvm:
+            # 如果没有RVM，返回不透明的BGRA
+            h, w = frame.shape[:2]
+            bgra = np.zeros((h, w, 4), dtype=np.uint8)
+            bgra[:, :, :3] = frame
+            bgra[:, :, 3] = 255
+            return bgra
+        return self.rvm_processor.process_frame_rgba(frame)
 
     def put_msg_txt(self,msg,datainfo:dict={}):
         self.tts.put_msg_txt(msg,datainfo)
@@ -370,13 +463,25 @@ class BaseReal:
                     combine_frame = current_frame
 
             if self.opt.transport=='virtualcam':
+                # 应用RVM背景去除（绿幕输出）
+                if self.enable_rvm:
+                    combine_frame = self.apply_rvm(combine_frame)
                 if vircam==None:
-                    height, width,_= combine_frame.shape
-                    vircam = pyvirtualcam.Camera(width=width, height=height, fps=25, fmt=pyvirtualcam.PixelFormat.BGR,print_fps=True)
+                    height, width = combine_frame.shape[:2]
+                    vircam = pyvirtualcam.Camera(width=width, height=height, fps=25, fmt=pyvirtualcam.PixelFormat.BGR, print_fps=True)
                 vircam.send(combine_frame)
             else: #webrtc
-                image = combine_frame
-                new_frame = VideoFrame.from_ndarray(image, format="bgr24")
+                # 应用RVM背景去除
+                if self.enable_rvm:
+                    # 如果启用透明流，同时获取BGRA和绿幕BGR（共享一次推理）
+                    if self.enable_transparent_stream and self.transparent_stream:
+                        bgra_frame, combine_frame = self.apply_rvm_both(combine_frame)
+                        self.transparent_stream.broadcast_frame_sync(bgra_frame, loop)
+                    else:
+                        # 只需要绿幕输出
+                        combine_frame = self.apply_rvm(combine_frame)
+                        
+                new_frame = VideoFrame.from_ndarray(combine_frame, format="bgr24")
                 asyncio.run_coroutine_threadsafe(video_track._queue.put((new_frame,None)), loop)
             self.record_video_data(combine_frame)
 

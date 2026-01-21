@@ -348,10 +348,24 @@ if __name__ == '__main__':
 
     parser.add_argument('--max_session', type=int, default=1)  #multi session count
     parser.add_argument('--listenport', type=int, default=8010, help="web listen port")
+    
+    # RVM background removal options
+    parser.add_argument('--enable_rvm', action='store_true', help="Enable RVM background removal for transparent background")
+    parser.add_argument('--rvm_model', type=str, default='./models/rvm_resnet50.pth', help="Path to RVM model file")
+    parser.add_argument('--rvm_downsample', type=float, default=0.25, help="RVM downsample ratio for faster processing (0.1-1.0)")
+    
+    # Transparent video stream options (WebSocket)
+    parser.add_argument('--enable_transparent_stream', action='store_true', help="Enable transparent video stream via WebSocket (requires --enable_rvm)")
 
     opt = parser.parse_args()
     #app.config.from_object(opt)
     #print(app.config)
+    
+    # Auto-enable RVM if transparent stream is requested
+    if opt.enable_transparent_stream and not opt.enable_rvm:
+        opt.enable_rvm = True
+        logger.info("Auto-enabled RVM because transparent stream is enabled")
+    
     opt.customopt = []
     if opt.customvideo_config!='':
         with open(opt.customvideo_config,'r') as file:
@@ -401,6 +415,13 @@ if __name__ == '__main__':
     appasync.router.add_post("/record", record)
     appasync.router.add_post("/interrupt_talk", interrupt_talk)
     appasync.router.add_post("/is_speaking", is_speaking)
+    
+    # Add transparent video stream WebSocket if enabled
+    if opt.enable_transparent_stream:
+        from transparent_stream import transparent_video_handler
+        appasync.router.add_get("/transparent_video", transparent_video_handler)
+        logger.info("Transparent video stream enabled at /transparent_video")
+    
     appasync.router.add_static('/',path='web')
 
     # Configure default CORS settings.
